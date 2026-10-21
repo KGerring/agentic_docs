@@ -1,0 +1,38 @@
+# pre-commit install            # once per clone
+# pre-commit run --all-files    # on demand
+# pre-commit autoupdate         # bump the pinned revisions
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-toml
+      - id: check-yaml
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: ["--maxkb=512"]
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.8
+    hooks:
+      - id: ruff-check
+        args: ["--fix"]
+      - id: ruff-format
+
+  - repo: local
+    hooks:
+      - id: pytest
+        name: pytest
+        entry: uv run --extra ts pytest -q
+        language: system
+        types: [python]
+        pass_filenames: false
+
+      # Drafts, the event store and your cll.toml hold personal history. .gitignore already
+      # excludes them; this refuses a forced add.
+      - id: no-collected-data
+        name: refuse collected data
+        entry: collected data must not be committed
+        language: fail
+        files: ^(drafts|site|state)/|^graph\.json$|^cll\.toml$|\.sqlite3$

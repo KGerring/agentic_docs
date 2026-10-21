@@ -1,0 +1,54 @@
+# cll.toml — closed-learning-loop collector
+# Relative paths resolve against this file's directory.
+
+[paths]
+drafts_dir = "drafts"          # markdown nodes land here; your other ingest reads it
+site_dir   = "site"            # `cll site` writes index.html here
+graph_file = "graph.json"      # node-link JSON of the whole graph (NetworkX-compatible)
+# state_dir = "~/.local/state/cll"   # SQLite event store + cursors (default shown)
+
+[render]
+link_style  = "wikilink"       # "wikilink" → [[tool/git|git]]   "markdown" → [git](../tool/git.md)
+on_consumed = "skip"           # a draft your ingest moved/deleted is only re-emitted when it changes
+backlink_limit = 15            # "Referenced by" entries listed per relation type
+h1 = true                      # false if your docs renderer adds its own title heading
+write_index = true             # keep drafts_dir/_index.md up to date
+
+[history]
+enabled = true
+files = []
+session_gap_minutes = 30       # a pause longer than this starts a new session node
+since_days = 0                 # 0 = everything the history file still holds
+min_tool_uses = 3              # a command needs this many uses (or a script reference) to get a node
+# ignore_tools = ["clear", "ll"]
+
+[git]
+enabled = true
+roots = []      # scanned for .git up to max_depth
+max_depth = 3
+lookback_days = 365
+author_only = false            # true = only commits by `git config user.email`
+
+[scripts]
+enabled = true
+roots = []
+extensions = [".sh", ".bash", ".zsh", ".ksh"]   # extensionless files are detected by shebang
+parser = "auto"                # "tree-sitter" (needs the `ts` extra) | "heuristic" | "auto"
+embed_source = "functions"     # scrubbed code in nodes: "functions" | "all" | "none"
+
+[logs]
+enabled = true
+# One block per log family. Lines below min_level are counted, not itemised.
+# [[logs.source]]
+# name = "homebrew"
+# globs = ["~/Library/Logs/Homebrew/**/*.log"]
+# min_level = "warn"
+
+[redact]
+# Extra regexes whose matches are replaced with [REDACTED:custom] before anything is stored.
+# extra_patterns = ["corp-[0-9a-f]{24}"]
+
+[site]
+title = "Second Brain"
+tagline = "Shell history, scripts, repos and logs as one linked graph."
+google_fonts = true            # false = system fonts only, no network request

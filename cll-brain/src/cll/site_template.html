@@ -1,0 +1,791 @@
+<title>__TITLE__</title>
+__FONT_LINK__
+<style>
+/* Layout: sticky bar (name, search, view switch) · filter rail left · results right.
+   A node opens as its own page: body on the left, properties and typed relations on the right. */
+:root {
+  --bg: #f3f5f2;
+  --surface: #fcfcfb;
+  --sunken: #e9ece8;
+  --ink: #15191a;
+  --ink-2: #4c5553;
+  --ink-3: #737c79;
+  --line: #d9ddd8;
+  --line-strong: #b4bbb6;
+  --accent: #0e5f5a;
+  --accent-ink: #ffffff;
+  --accent-wash: #dcebe8;
+  --warn: #9a5b00;
+  /* node types: one fixed categorical slot each (validated order, never cycled) */
+  --t-tool: #2a78d6;
+  --t-script: #eb6834;
+  --t-fn: #1baf7a;
+  --t-session: #eda100;
+  --t-day: #e87ba4;
+  --t-repo: #008300;
+  --t-log: #4a3aa7;
+  --t-logday: #e34948;
+  --t-other: #737c79;
+  --font-display: __FONT_DISPLAY__;
+  --font-body: __FONT_BODY__;
+  --font-mono: __FONT_MONO__;
+  --radius: 6px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #121413; --surface: #1a1a19; --sunken: #222524; --ink: #eef1ee; --ink-2: #b9c0bc;
+    --ink-3: #8b938f; --line: #2d312f; --line-strong: #4a504d; --accent: #74cfc5; --accent-ink: #0b1f1d;
+    --accent-wash: #1c302e; --warn: #e3a94a;
+    --t-tool: #3987e5; --t-script: #d95926; --t-fn: #199e70; --t-session: #c98500; --t-day: #d55181;
+    --t-repo: #008300; --t-log: #9085e9; --t-logday: #e66767; --t-other: #8b938f;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #121413; --surface: #1a1a19; --sunken: #222524; --ink: #eef1ee; --ink-2: #b9c0bc;
+  --ink-3: #8b938f; --line: #2d312f; --line-strong: #4a504d; --accent: #74cfc5; --accent-ink: #0b1f1d;
+  --accent-wash: #1c302e; --warn: #e3a94a;
+  --t-tool: #3987e5; --t-script: #d95926; --t-fn: #199e70; --t-session: #c98500; --t-day: #d55181;
+  --t-repo: #008300; --t-log: #9085e9; --t-logday: #e66767; --t-other: #8b938f;
+  color-scheme: dark;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.55 var(--font-body); }
+a { color: var(--accent); text-underline-offset: 2px; }
+button, input, select { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.mono { font-family: var(--font-mono); font-size: 0.86em; }
+
+/* ---- bar ---- */
+.bar {
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20;
+  background: var(--surface); border-bottom: 1px solid var(--line);
+}
+.bar-in {
+  max-width: 1320px; margin-inline: auto; padding: 10px 20px;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px;
+}
+.brand { display: flex; align-items: baseline; gap: 10px; min-width: 0; text-decoration: none; color: var(--ink); }
+.brand b { font: 600 19px/1.2 var(--font-display); letter-spacing: -0.01em; white-space: nowrap; }
+.brand span { color: var(--ink-3); font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.search { flex: 1 1 240px; min-width: 0; position: relative; }
+.search input {
+  width: 100%; padding: 7px 10px 7px 30px; border: 1px solid var(--line-strong); border-radius: var(--radius);
+  background: var(--bg);
+}
+.search::before {
+  content: ""; position: absolute; left: 11px; top: 50%; width: 9px; height: 9px; margin-top: -7px;
+  border: 1.6px solid var(--ink-3); border-radius: 50%; box-shadow: 5px 5px 0 -3.6px var(--ink-3);
+}
+.seg { display: inline-flex; border: 1px solid var(--line-strong); border-radius: var(--radius); overflow: hidden; }
+.seg button { border: 0; background: transparent; padding: 6px 13px; cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--line-strong); }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--surface); }
+
+.notice { max-width: 1320px; margin: 0 auto; padding: 10px 20px 0; color: var(--ink-2); font-size: 13px; }
+.notice:empty { display: none; }
+
+/* ---- shell ---- */
+.shell {
+  max-width: 1320px; margin-inline: auto; padding-inline: 20px; padding-block: 18px 56px;
+  display: grid; grid-template-columns: 236px minmax(0, 1fr); gap: 26px; align-items: start;
+}
+.rail { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 68px); max-height: calc(100vh - 88px); overflow-y: auto; padding-right: 4px; }
+.rail h2, .aside h2 {
+  font: 600 11px/1 var(--font-body); letter-spacing: 0.09em; text-transform: uppercase; color: var(--ink-3);
+  margin: 0 0 8px;
+}
+.rail section + section { margin-top: 20px; }
+.rail-toggle { display: none; }
+.opt { display: flex; align-items: center; gap: 8px; width: 100%; padding: 4px 6px; border: 0; border-radius: 4px;
+  background: transparent; text-align: left; cursor: pointer; }
+.opt:hover { background: var(--sunken); }
+.opt[aria-pressed="true"] { background: var(--accent-wash); }
+.opt .n { margin-left: auto; color: var(--ink-3); font-variant-numeric: tabular-nums; font-size: 12.5px; }
+.opt .name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.opt[data-zero="1"] { opacity: 0.45; }
+.tagbox { display: flex; flex-wrap: wrap; gap: 5px; }
+.tag {
+  border: 1px solid var(--line-strong); background: transparent; border-radius: 99px; padding: 1px 9px;
+  font-size: 12.5px; cursor: pointer; white-space: nowrap; color: var(--ink-2);
+}
+.tag:hover { border-color: var(--ink-2); }
+.tag[aria-pressed="true"] { background: var(--ink); color: var(--surface); border-color: var(--ink); }
+.tag small { color: inherit; opacity: 0.65; margin-left: 3px; font-variant-numeric: tabular-nums; }
+.linkish { border: 0; background: none; padding: 0; color: var(--accent); cursor: pointer; text-decoration: underline; text-underline-offset: 2px; font-size: 13px; }
+.rail input[type="search"] { width: 100%; padding: 4px 8px; margin-bottom: 8px; border: 1px solid var(--line-strong); border-radius: 4px; background: var(--bg); font-size: 13px; }
+
+/* ---- type glyphs (shape + colour: identity never rests on colour alone) ---- */
+.glyph { width: 11px; height: 11px; flex: none; display: inline-block; background: var(--c, var(--t-other)); }
+.glyph[data-t="tool"] { border-radius: 50%; }
+.glyph[data-t="script"] { border-radius: 1px; }
+.glyph[data-t="fn"] { transform: rotate(45deg) scale(0.82); }
+.glyph[data-t="session"] { clip-path: polygon(50% 0, 100% 100%, 0 100%); }
+.glyph[data-t="day"] { clip-path: polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%); }
+.glyph[data-t="repo"] { clip-path: polygon(50% 0, 100% 38%, 81% 100%, 19% 100%, 0 38%); }
+.glyph[data-t="log"] { clip-path: polygon(0 0, 100% 0, 50% 100%); }
+.glyph[data-t="logday"] { clip-path: polygon(35% 0, 65% 0, 65% 35%, 100% 35%, 100% 65%, 65% 65%, 65% 100%, 35% 100%, 35% 65%, 0 65%, 0 35%, 35% 35%); }
+[data-t="tool"] { --c: var(--t-tool); } [data-t="script"] { --c: var(--t-script); }
+[data-t="fn"] { --c: var(--t-fn); } [data-t="session"] { --c: var(--t-session); }
+[data-t="day"] { --c: var(--t-day); } [data-t="repo"] { --c: var(--t-repo); }
+[data-t="log"] { --c: var(--t-log); } [data-t="logday"] { --c: var(--t-logday); }
+
+/* ---- results ---- */
+.status-line { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin-bottom: 14px; color: var(--ink-2); font-size: 13.5px; }
+.status-line strong { color: var(--ink); font-variant-numeric: tabular-nums; }
+.status-line select { padding: 3px 6px; border: 1px solid var(--line-strong); border-radius: 4px; background: var(--surface); }
+.status-line .push { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(272px, 1fr)); gap: 12px; }
+.card {
+  display: flex; flex-direction: column; gap: 6px; min-width: 0; padding: 13px 14px 12px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+  color: inherit; text-decoration: none;
+}
+.card:hover { border-color: var(--line-strong); }
+.kind { display: flex; align-items: center; gap: 7px; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3); }
+.kind .when { margin-left: auto; letter-spacing: 0; text-transform: none; font-variant-numeric: tabular-nums; }
+.card h3 { margin: 0; font: 600 16.5px/1.3 var(--font-display); overflow-wrap: anywhere; text-wrap: balance; }
+.card p code, .lede code { font-family: var(--font-mono); font-size: 0.88em; background: var(--sunken); padding: 0 3px; border-radius: 3px; }
+.card p { margin: 0; color: var(--ink-2); font-size: 13.5px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+.card .tags { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 12px; color: var(--ink-3); }
+.card .rel { margin-top: auto; padding-top: 7px; border-top: 1px dashed var(--line); font-size: 12.5px; color: var(--ink-2); overflow-wrap: anywhere; }
+.card .rel b { font-weight: 600; color: var(--ink); }
+.more { margin: 18px auto 0; display: block; padding: 8px 18px; border: 1px solid var(--line-strong); background: var(--surface); border-radius: var(--radius); cursor: pointer; }
+.empty { padding: 44px 20px; text-align: center; color: var(--ink-2); border: 1px dashed var(--line-strong); border-radius: var(--radius); }
+
+/* ---- graph ---- */
+.graph-wrap { position: relative; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+.graph-wrap canvas { display: block; width: 100%; height: min(68vh, 720px); min-height: 380px; touch-action: none; cursor: grab; }
+.graph-tools { position: absolute; top: 10px; right: 10px; display: flex; gap: 4px; }
+.graph-tools button { width: 32px; height: 32px; border: 1px solid var(--line-strong); background: var(--surface); border-radius: 4px; cursor: pointer; font-size: 16px; line-height: 1; }
+.tip { position: absolute; pointer-events: none; max-width: 280px; padding: 8px 10px; background: var(--ink); color: var(--surface); border-radius: 4px; font-size: 12.5px; line-height: 1.4; }
+.tip b { display: block; font-size: 13px; }
+.tip i { font-style: normal; opacity: 0.7; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; padding: 10px 12px; border-top: 1px solid var(--line); font-size: 12.5px; color: var(--ink-2); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend .sep { width: 1px; background: var(--line); align-self: stretch; }
+.stroke { width: 22px; height: 0; border-top: 2px solid var(--ink-3); }
+.stroke[data-p="inferred"] { border-top-style: dashed; }
+.stroke[data-p="curated"] { border-top-color: var(--accent); border-top-width: 3px; }
+.focus-note { margin-bottom: 10px; padding: 8px 12px; background: var(--accent-wash); border-radius: var(--radius); display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; font-size: 13.5px; }
+
+/* ---- node page ---- */
+.page { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 30px; align-items: start; }
+.page-head { grid-column: 1 / -1; }
+.page-head h1 { margin: 6px 0 4px; font: 600 clamp(24px, 3.4vw, 34px)/1.15 var(--font-display); letter-spacing: -0.015em; overflow-wrap: anywhere; text-wrap: balance; }
+.page-head .lede { margin: 8px 0 0; max-width: 68ch; color: var(--ink-2); font-size: 16px; }
+.crumbs { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; font-size: 13.5px; margin-bottom: 14px; }
+.pill { display: inline-block; padding: 0 8px; border: 1px solid var(--line-strong); border-radius: 99px; font-size: 11.5px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ink-2); }
+.pill[data-s="promote"], .pill[data-s="keep"] { border-color: var(--accent); color: var(--accent); }
+.pill[data-s="stale"] { border-color: var(--warn); color: var(--warn); }
+.page-tags { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 12px; }
+.prose { min-width: 0; max-width: 78ch; }
+.prose > :first-child { margin-top: 0; }
+.prose h2 { font: 600 19px/1.3 var(--font-display); margin: 28px 0 8px; }
+.prose h3 { font: 600 14px/1.3 var(--font-body); margin: 20px 0 6px; }
+.prose p, .prose li { overflow-wrap: anywhere; }
+.prose ul { padding-left: 20px; }
+.prose code { font-family: var(--font-mono); font-size: 0.86em; background: var(--sunken); padding: 1px 4px; border-radius: 3px; }
+.prose pre { background: var(--sunken); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; overflow-x: auto; font-size: 12.5px; line-height: 1.5; }
+.prose pre code { background: none; padding: 0; font-size: inherit; }
+.prose blockquote { margin: 0 0 12px; padding-left: 12px; border-left: 3px solid var(--line-strong); color: var(--ink-2); }
+.table-scroll { overflow-x: auto; }
+.prose table { border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+.prose th, .prose td { padding: 5px 10px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+.prose th { font-weight: 600; color: var(--ink-2); }
+.aside { min-width: 0; display: flex; flex-direction: column; gap: 22px; }
+.aside section { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; }
+.props { margin: 0; display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 12px; font-size: 13px; }
+.props dt { color: var(--ink-3); }
+.props dd { margin: 0; overflow-wrap: anywhere; font-family: var(--font-mono); font-size: 12px; line-height: 1.6; }
+.rel-group + .rel-group { margin-top: 14px; }
+.rel-group h3 { margin: 0 0 4px; font: 500 12.5px/1.4 var(--font-mono); color: var(--ink-2); display: flex; gap: 8px; }
+.rel-group h3 span { color: var(--ink-3); }
+.rel-list { list-style: none; margin: 0; padding: 0; }
+.rel-list li { display: grid; grid-template-columns: 14px minmax(0, 1fr); gap: 2px 7px; padding: 5px 0; border-top: 1px solid var(--line); }
+.rel-list .glyph { margin-top: 6px; }
+.rel-list a { font-weight: 500; overflow-wrap: anywhere; }
+.rel-list .why { grid-column: 2; font-size: 12.5px; color: var(--ink-2); overflow-wrap: anywhere; }
+.prov { font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-3); padding-bottom: 1px; border-bottom: 2px solid var(--ink-3); margin-left: 6px; white-space: nowrap; }
+.prov[data-p="inferred"] { border-bottom-style: dashed; }
+.prov[data-p="curated"] { border-bottom-color: var(--accent); color: var(--accent); }
+
+@media (max-width: 940px) {
+  .shell { grid-template-columns: minmax(0, 1fr); gap: 14px; padding-inline: 16px; }
+  .bar-in, .notice { padding-inline: 16px; }
+  .rail { position: static; max-height: none; overflow: visible; }
+  .rail-toggle { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border: 1px solid var(--line-strong); background: var(--surface); border-radius: var(--radius); cursor: pointer; }
+  .rail-body { margin-top: 14px; }
+  .rail:not([data-open="1"]) .rail-body { display: none; }
+  .page { grid-template-columns: minmax(0, 1fr); }
+  .brand span { display: none; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .card, .opt, .tag { transition: border-color 0.12s, background-color 0.12s; }
+}
+</style>
+
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="#" id="home"><b>__TITLE__</b><span>__TAGLINE__</span></a>
+    <label class="search"><span class="sr">Search nodes</span>
+      <input id="q" type="search" placeholder="Search titles, ids, tags, text" autocomplete="off" spellcheck="false">
+    </label>
+    <div class="seg" role="group" aria-label="View">
+      <button type="button" id="v-cards" aria-pressed="true">Cards</button>
+      <button type="button" id="v-graph" aria-pressed="false">Graph</button>
+    </div>
+  </div>
+</header>
+
+<p class="notice" id="notice">__NOTICE__</p>
+<div class="shell" id="browse">
+  <nav class="rail" id="rail" aria-label="Filters">
+    <button type="button" class="rail-toggle" id="rail-toggle" aria-expanded="false">Filters <span id="rail-count"></span></button>
+    <div class="rail-body">
+      <section><h2>Type</h2><div id="f-types"></div></section>
+      <section id="sec-status" hidden><h2>Status</h2><div id="f-status"></div></section>
+      <section><h2>Edge provenance</h2><div id="f-prov"></div></section>
+      <section><h2>Tags</h2>
+        <input type="search" id="tagq" placeholder="Filter tags" aria-label="Filter the tag list">
+        <div class="tagbox" id="f-tags"></div>
+        <p style="margin:8px 0 0"><button type="button" class="linkish" id="tags-more" hidden>Show all tags</button></p>
+      </section>
+      <section><button type="button" class="linkish" id="clear">Clear all filters</button></section>
+    </div>
+  </nav>
+  <main id="results" aria-live="polite"></main>
+</div>
+<div class="shell" id="detail" hidden style="grid-template-columns:minmax(0,1fr)"><main id="node"></main></div>
+
+<script type="application/json" id="cll-data">__DATA__</script>
+<script>
+(() => {
+  "use strict";
+  const DATA = JSON.parse(document.getElementById("cll-data").textContent);
+  const CFG = DATA.config;
+  const NODES = DATA.nodes;
+  const byId = new Map(NODES.map((n) => [n.id, n]));
+  const LABELS = { tool: "Tool", script: "Script", fn: "Function", session: "Session", day: "Day", repo: "Repo", log: "Log", logday: "Log digest" };
+  const PLURAL = { tool: "Tools", script: "Scripts", fn: "Functions", session: "Sessions", day: "Days", repo: "Repos", log: "Logs", logday: "Log digests" };
+  const TYPE_ORDER = ["tool", "script", "fn", "session", "day", "repo", "log", "logday"];
+  const PROVS = ["extracted", "inferred", "curated"];
+  const INVERSE = { defines: "defined_in", defined_in: "defines" };
+  const EDGE_ORDER = ["defined_in", "part_of", "defines", "sources", "invokes", "calls", "uses", "runs", "touches", "on_day", "follows", "from_source", "pairs_with"];
+  const edgeRank = (t) => { const i = EDGE_ORDER.indexOf(t); return i < 0 ? EDGE_ORDER.length : i; };
+
+  // ---- derive --------------------------------------------------------------
+  for (const n of NODES) {
+    n.out = (n.edges || []).filter((e) => byId.has(e.target));
+    n.dangling = (n.edges || []).filter((e) => !byId.has(e.target));
+    n.inn = [];
+    n.hay = [n.title, n.id, n.summary, (n.tags || []).join(" "), (n.html || "").replace(/<[^>]+>/g, " ")].join(" ").toLowerCase();
+  }
+  for (const n of NODES) for (const e of n.out) {
+    const t = byId.get(e.target);
+    const inv = INVERSE[e.type];
+    if (inv && t.out.some((x) => x.type === inv && x.target === n.id)) continue;
+    t.inn.push({ type: e.type, source: n.id, provenance: e.provenance, why: e.why, weight: e.weight });
+  }
+  for (const n of NODES) n.degree = n.out.length + n.inn.length;
+  const types = [...new Set(NODES.map((n) => n.type))].sort((a, b) => {
+    const ia = TYPE_ORDER.indexOf(a), ib = TYPE_ORDER.indexOf(b);
+    return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib) || a.localeCompare(b);
+  });
+  const statuses = [...new Set(NODES.map((n) => n.status || "draft"))].sort();
+
+  // ---- state ---------------------------------------------------------------
+  const S = { q: "", types: new Set(), tags: new Set(), status: new Set(), prov: new Set(PROVS),
+              sort: "recent", view: "cards", shown: CFG.page_size, focus: null, hops: 1, allTags: false, tagq: "" };
+  const store = {
+    get(k) { try { return localStorage.getItem("cll." + k); } catch { return null; } },
+    set(k, v) { try { localStorage.setItem("cll." + k, v); } catch { /* optional */ } },
+  };
+  if (["recent", "title", "linked"].includes(store.get("sort"))) S.sort = store.get("sort");
+
+  const $ = (id) => document.getElementById(id);
+  const el = (tag, attrs = {}, ...kids) => {
+    const e = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs)) {
+      if (v === false || v == null) continue;
+      if (k === "class") e.className = v;
+      else if (k === "text") e.textContent = v;
+      else if (k === "html") e.innerHTML = v;
+      else if (k.startsWith("on")) e.addEventListener(k.slice(2), v);
+      else e.setAttribute(k, v === true ? "" : v);
+    }
+    for (const kid of kids.flat()) if (kid != null && kid !== false) e.append(kid);
+    return e;
+  };
+  const glyph = (t) => el("i", { class: "glyph", "data-t": t, "aria-hidden": "true" });
+  // `code` spans inside one-line summaries, without interpreting anything else as markup
+  const inline = (text) => String(text).split("`").map((part, i) => (i % 2 ? el("code", { text: part }) : part));
+  const hashOf = (id) => "#" + id.replace(/\//g, "~");
+  const idOf = (hash) => { try { return decodeURIComponent(hash.replace(/^#/, "")).replace(/~/g, "/"); } catch { return ""; } };
+  const label = (t) => LABELS[t] || t;
+  const day = (iso) => (iso ? String(iso).slice(0, 10) : "");
+
+  // ---- filtering -----------------------------------------------------------
+  function matches(n, skip) {
+    if (skip !== "types" && S.types.size && !S.types.has(n.type)) return false;
+    if (skip !== "status" && S.status.size && !S.status.has(n.status || "draft")) return false;
+    if (skip !== "tags") for (const t of S.tags) if (!(n.tags || []).includes(t)) return false;
+    if (S.q) for (const tok of S.q.toLowerCase().split(/\s+/)) if (tok && !n.hay.includes(tok)) return false;
+    return true;
+  }
+  function sorted(list) {
+    const by = {
+      recent: (a, b) => (b.date || b.updated || "").localeCompare(a.date || a.updated || "") || a.title.localeCompare(b.title),
+      title: (a, b) => a.title.localeCompare(b.title),
+      linked: (a, b) => b.degree - a.degree || a.title.localeCompare(b.title),
+    }[S.sort];
+    return list.slice().sort(by);
+  }
+  const activeCount = () => S.types.size + S.tags.size + S.status.size + (S.prov.size < PROVS.length ? 1 : 0);
+
+  // ---- rail ----------------------------------------------------------------
+  function option(name, count, pressed, onclick, lead) {
+    return el("button", { type: "button", class: "opt", "aria-pressed": String(pressed), "data-zero": count ? null : "1", onclick },
+      lead, el("span", { class: "name", text: name }), el("span", { class: "n", text: String(count) }));
+  }
+  function toggle(set, v) { set.has(v) ? set.delete(v) : set.add(v); S.shown = CFG.page_size; render(); }
+
+  function renderRail() {
+    const typeBase = NODES.filter((n) => matches(n, "types"));
+    $("f-types").replaceChildren(...types.map((t) =>
+      option(PLURAL[t] || t, typeBase.filter((n) => n.type === t).length, S.types.has(t), () => toggle(S.types, t), glyph(t))));
+
+    $("sec-status").hidden = statuses.length < 2;
+    const stBase = NODES.filter((n) => matches(n, "status"));
+    $("f-status").replaceChildren(...statuses.map((s) =>
+      option(s, stBase.filter((n) => (n.status || "draft") === s).length, S.status.has(s), () => toggle(S.status, s))));
+
+    const pc = { extracted: 0, inferred: 0, curated: 0 };
+    for (const n of NODES) for (const e of n.out) pc[e.provenance] = (pc[e.provenance] || 0) + 1;
+    $("f-prov").replaceChildren(...PROVS.map((p) =>
+      option(p, pc[p] || 0, S.prov.has(p), () => toggle(S.prov, p), el("i", { class: "stroke", "data-p": p, "aria-hidden": "true" }))));
+
+    const counts = new Map();
+    for (const n of NODES) if (matches(n, "tags")) for (const t of n.tags || []) counts.set(t, (counts.get(t) || 0) + 1);
+    for (const t of S.tags) if (!counts.has(t)) counts.set(t, 0);
+    let tags = [...counts].sort((a, b) => (S.tags.has(b[0]) - S.tags.has(a[0])) || b[1] - a[1] || a[0].localeCompare(b[0]));
+    if (S.tagq) tags = tags.filter(([t]) => t.toLowerCase().includes(S.tagq.toLowerCase()) || S.tags.has(t));
+    const limit = S.allTags || S.tagq ? tags.length : 28;
+    $("f-tags").replaceChildren(...tags.slice(0, limit).map(([t, c]) =>
+      el("button", { type: "button", class: "tag", "aria-pressed": String(S.tags.has(t)), onclick: () => toggle(S.tags, t) }, t, el("small", { text: String(c) }))));
+    const more = $("tags-more");
+    more.hidden = tags.length <= 28 || !!S.tagq;
+    more.textContent = S.allTags ? "Show fewer tags" : `Show all ${tags.length} tags`;
+    $("clear").hidden = !activeCount() && !S.q;
+    $("rail-count").textContent = activeCount() ? `(${activeCount()})` : "";
+  }
+
+  // ---- cards ---------------------------------------------------------------
+  function relLine(n) {
+    const groups = new Map();
+    for (const e of n.out) if (S.prov.has(e.provenance)) (groups.get(e.type) || groups.set(e.type, []).get(e.type)).push(e);
+    if (!groups.size) return null;
+    const [type, edges] = [...groups].sort((a, b) => b[1].length - a[1].length)[0];
+    edges.sort((a, b) => (b.weight || 1) - (a.weight || 1));
+    const names = edges.slice(0, 3).map((e) => byId.get(e.target).title);
+    const extra = edges.length > 3 ? ` +${edges.length - 3}` : "";
+    return el("div", { class: "rel" }, "→ " + type.replace(/_/g, " ") + " ", el("b", { text: names.join(", ") }), extra);
+  }
+  function card(n) {
+    return el("a", { class: "card", href: hashOf(n.id), "data-t": n.type },
+      el("div", { class: "kind" }, glyph(n.type), label(n.type), el("span", { class: "when", text: day(n.date) })),
+      el("h3", { text: n.title }),
+      n.summary ? el("p", {}, inline(n.summary)) : null,
+      (n.tags || []).length ? el("div", { class: "tags" }, n.tags.slice(0, 5).map((t) => el("span", { text: "#" + t }))) : null,
+      relLine(n));
+  }
+  function statusLine(total, extra) {
+    const sel = el("select", { id: "sort", "aria-label": "Sort by", onchange: (e) => { S.sort = e.target.value; store.set("sort", S.sort); render(); } },
+      [["recent", "Most recent"], ["linked", "Most linked"], ["title", "Title A–Z"]].map(([v, t]) => el("option", { value: v, selected: S.sort === v, text: t })));
+    return el("div", { class: "status-line" },
+      el("span", {}, el("strong", { text: total.toLocaleString() }), ` of ${NODES.length.toLocaleString()} nodes`), extra,
+      el("span", { class: "push" }, S.view === "cards" ? [el("label", { for: "sort", text: "Sort" }), sel] : null));
+  }
+  function renderCards(list) {
+    const out = [statusLine(list.length)];
+    if (!list.length) out.push(el("div", { class: "empty" }, "No node matches these filters. ",
+      el("button", { type: "button", class: "linkish", onclick: clearAll, text: "Clear all filters" })));
+    else {
+      out.push(el("div", { class: "grid" }, sorted(list).slice(0, S.shown).map(card)));
+      if (list.length > S.shown) out.push(el("button", { type: "button", class: "more",
+        onclick: () => { S.shown += CFG.page_size; render(); }, text: `Show ${Math.min(CFG.page_size, list.length - S.shown)} more` }));
+    }
+    $("results").replaceChildren(...out);
+  }
+
+  // ---- graph ---------------------------------------------------------------
+  const G = { nodes: [], edges: [], k: 1, x: 0, y: 0, alpha: 0, raf: 0, hover: null, drag: null, key: "", css: null };
+  const SHAPES = { tool: 0, script: 4, fn: 44, session: 3, day: 6, repo: 5, log: 33, logday: 12 };
+
+  function neighbourhood(id, hops) {
+    const seen = new Set([id]);
+    let frontier = [id];
+    for (let h = 0; h < hops; h++) {
+      const next = [];
+      for (const f of frontier) {
+        const n = byId.get(f);
+        for (const e of n.out) if (S.prov.has(e.provenance) && !seen.has(e.target)) { seen.add(e.target); next.push(e.target); }
+        for (const e of n.inn) if (S.prov.has(e.provenance) && !seen.has(e.source)) { seen.add(e.source); next.push(e.source); }
+      }
+      frontier = next;
+    }
+    return [...seen].map((i) => byId.get(i));
+  }
+  function buildGraph(list) {
+    let chosen = list, capped = 0;
+    if (chosen.length > CFG.graph_node_cap) {
+      capped = chosen.length;
+      chosen = chosen.slice().sort((a, b) => b.degree - a.degree).slice(0, CFG.graph_node_cap);
+    }
+    const key = chosen.map((n) => n.id).join("|") + [...S.prov].join();
+    if (key === G.key) return capped;
+    const old = new Map(G.nodes.map((p) => [p.n.id, p]));
+    const R = 40 * Math.sqrt(chosen.length + 1);
+    G.nodes = chosen.map((n, i) => {
+      const prev = old.get(n.id);
+      const a = i * 2.39996;  // golden angle: an even, repeatable starting spiral
+      const r = R * Math.sqrt((i + 0.5) / chosen.length);
+      return { n, x: prev ? prev.x : Math.cos(a) * r, y: prev ? prev.y : Math.sin(a) * r, vx: 0, vy: 0, r: Math.min(15, 4.5 + Math.sqrt(n.degree) * 1.25), links: 0 };
+    });
+    const idx = new Map(G.nodes.map((p, i) => [p.n.id, i]));
+    G.nodes.slice().sort((a, b) => b.n.degree - a.n.degree).forEach((p, i) => { p.rank = i; });
+    G.edges = [];
+    for (const p of G.nodes) for (const e of p.n.out) {
+      if (!S.prov.has(e.provenance) || !idx.has(e.target)) continue;
+      const q = G.nodes[idx.get(e.target)];
+      G.edges.push({ a: p, b: q, e });
+      p.links++; q.links++;
+    }
+    G.key = key;
+    G.alpha = 1;
+    G.fit = true;
+    return capped;
+  }
+  function tick() {
+    const ns = G.nodes, n = ns.length, a = G.alpha;
+    for (let i = 0; i < n; i++) {
+      const p = ns[i];
+      for (let j = i + 1; j < n; j++) {
+        const q = ns[j];
+        let dx = p.x - q.x, dy = p.y - q.y, d2 = dx * dx + dy * dy;
+        if (d2 < 0.01) { dx = (i % 7) - 3 + 0.5; dy = (j % 5) - 2 + 0.5; d2 = dx * dx + dy * dy; }
+        if (d2 > 160000) continue;
+        const f = (1500 * a) / d2;
+        p.vx += dx * f; p.vy += dy * f; q.vx -= dx * f; q.vy -= dy * f;
+      }
+      p.vx -= p.x * 0.012 * a; p.vy -= p.y * 0.012 * a;
+    }
+    for (const { a: p, b: q } of G.edges) {
+      const dx = q.x - p.x, dy = q.y - p.y, d = Math.sqrt(dx * dx + dy * dy) || 1;
+      const want = 54 + p.r + q.r;
+      const f = ((d - want) / d) * 0.09 * a;
+      const wp = 1 / Math.max(1, Math.sqrt(p.links)), wq = 1 / Math.max(1, Math.sqrt(q.links));
+      p.vx += dx * f * wp; p.vy += dy * f * wp; q.vx -= dx * f * wq; q.vy -= dy * f * wq;
+    }
+    for (const p of ns) {
+      if (G.drag && G.drag.node === p) { p.vx = p.vy = 0; continue; }
+      p.vx *= 0.82; p.vy *= 0.82; p.x += p.vx; p.y += p.vy;
+    }
+    G.alpha *= 0.985;
+  }
+  // Marks keep a readable size on screen however far the view is zoomed out.
+  const rad = (p) => (p.r * Math.min(1.6, Math.max(1, Math.sqrt(G.k)))) / G.k;
+  function tokens() {
+    const cs = getComputedStyle(document.documentElement);
+    const v = (name) => cs.getPropertyValue(name).trim();
+    G.css = { ink: v("--ink"), ink3: v("--ink-3"), line: v("--line-strong"), surface: v("--surface"), accent: v("--accent"),
+              type: Object.fromEntries([...TYPE_ORDER, "other"].map((t) => [t, v("--t-" + t)])) };
+  }
+  function shape(ctx, kind, x, y, r) {
+    ctx.beginPath();
+    if (kind === 0) ctx.arc(x, y, r, 0, Math.PI * 2);
+    else if (kind === 12) {  // plus, as one outline so the surface ring does not cut through it
+      const t = r * 0.42, R = r * 1.15;
+      const pts = [[-t, -R], [t, -R], [t, -t], [R, -t], [R, t], [t, t], [t, R], [-t, R], [-t, t], [-R, t], [-R, -t], [-t, -t]];
+      pts.forEach(([px, py], i) => (i ? ctx.lineTo(x + px, y + py) : ctx.moveTo(x + px, y + py)));
+      ctx.closePath();
+    } else {
+      const sides = kind === 44 ? 4 : kind === 33 ? 3 : kind;
+      const rot = kind === 4 ? Math.PI / 4 : kind === 33 ? Math.PI / 2 : kind === 6 ? 0 : -Math.PI / 2;
+      const rr = kind === 4 ? r * 1.2 : kind === 3 || kind === 33 ? r * 1.25 : r * 1.08;
+      for (let i = 0; i < sides; i++) {
+        const a = rot + (i * 2 * Math.PI) / sides;
+        i ? ctx.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr) : ctx.moveTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr);
+      }
+      ctx.closePath();
+    }
+  }
+  function fitView(w, h) {
+    if (!G.nodes.length) return;
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const p of G.nodes) { x0 = Math.min(x0, p.x - p.r); y0 = Math.min(y0, p.y - p.r); x1 = Math.max(x1, p.x + p.r); y1 = Math.max(y1, p.y + p.r); }
+    G.k = Math.min(2.2, Math.min(w / (x1 - x0 + 90), h / (y1 - y0 + 70)));
+    G.x = w / 2 - ((x0 + x1) / 2) * G.k; G.y = h / 2 - ((y0 + y1) / 2) * G.k;
+  }
+  function draw() {
+    const cv = $("cv");
+    if (!cv) return;
+    const dpr = window.devicePixelRatio || 1, w = cv.clientWidth, h = cv.clientHeight;
+    if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); G.fit = G.fit || !G.touched; }
+    if (!G.css) tokens();
+    if (G.fit && !G.touched) fitView(w, h);
+    const ctx = cv.getContext("2d"), c = G.css;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.fillStyle = c.surface; ctx.fillRect(0, 0, w, h);
+    ctx.translate(G.x, G.y); ctx.scale(G.k, G.k);
+    const hot = G.hover, near = new Set();
+    if (hot) { near.add(hot); for (const { a, b } of G.edges) { if (a === hot) near.add(b); if (b === hot) near.add(a); } }
+    for (const { a, b, e } of G.edges) {
+      const lit = hot && (a === hot || b === hot);
+      ctx.globalAlpha = hot ? (lit ? 0.95 : 0.12) : 0.5;
+      ctx.strokeStyle = e.provenance === "curated" ? c.accent : lit ? c.ink : c.line;
+      ctx.lineWidth = (e.provenance === "curated" ? 2 : 1) / G.k;
+      ctx.setLineDash(e.provenance === "inferred" ? [5 / G.k, 4 / G.k] : []);
+      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+    }
+    ctx.setLineDash([]);
+    for (const p of G.nodes) {
+      const r = rad(p);
+      ctx.globalAlpha = hot && !near.has(p) ? 0.22 : 1;
+      shape(ctx, SHAPES[p.n.type] ?? 0, p.x, p.y, r);
+      ctx.fillStyle = c.type[p.n.type] || c.type.other; ctx.fill();
+      ctx.lineWidth = 2 / G.k; ctx.strokeStyle = c.surface; ctx.stroke();   // surface ring keeps overlapping marks apart
+      if (p.n.id === S.focus) { ctx.lineWidth = 2.5 / G.k; ctx.strokeStyle = c.ink; shape(ctx, 0, p.x, p.y, r + 5 / G.k); ctx.stroke(); }
+    }
+    const fs = 11.5 / G.k;
+    ctx.font = `${fs}px ${getComputedStyle(document.body).fontFamily}`;
+    ctx.textAlign = "center"; ctx.textBaseline = "top";
+    // Direct labels go to the most linked nodes first; zooming in reveals more of them.
+    const budget = G.nodes.length <= 30 ? G.nodes.length : Math.round(Math.max(10, 16 * G.k * G.k));
+    const placed = [];
+    const ordered = G.nodes.slice().sort((a, b) => (near.has(b) - near.has(a)) || a.rank - b.rank);
+    for (const p of ordered) {
+      const forced = near.has(p) || p.n.id === S.focus;
+      if (!forced && (hot || p.rank >= budget)) continue;
+      const short = p.n.title.split(" · ")[0];
+      const text = short.length > 30 ? short.slice(0, 29) + "…" : short;
+      const y = p.y + rad(p) + 3 / G.k, half = ctx.measureText(text).width / 2 + 3 / G.k;
+      const box = [p.x - half, y, p.x + half, y + fs * 1.25];
+      if (p !== hot && placed.some((b) => box[0] < b[2] && box[2] > b[0] && box[1] < b[3] && box[3] > b[1])) continue;
+      placed.push(box);
+      ctx.globalAlpha = 1;
+      ctx.lineWidth = 3 / G.k; ctx.strokeStyle = c.surface; ctx.lineJoin = "round"; ctx.strokeText(text, p.x, y);
+      ctx.fillStyle = c.ink; ctx.fillText(text, p.x, y);
+    }
+    ctx.globalAlpha = 1;
+  }
+  function loop() {
+    cancelAnimationFrame(G.raf);
+    const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const step = () => {
+      if (!$("cv")) return;
+      if (G.alpha > 0.03) {
+        const budget = still ? 400 : G.nodes.length > 300 ? 1 : 3;
+        for (let i = 0; i < budget && G.alpha > 0.03; i++) tick();
+        draw();
+        G.raf = requestAnimationFrame(step);
+      } else { G.fit = false; draw(); }
+    };
+    step();
+  }
+  function at(ev) {
+    const r = $("cv").getBoundingClientRect();
+    const x = (ev.clientX - r.left - G.x) / G.k, y = (ev.clientY - r.top - G.y) / G.k;
+    let best = null, bd = Infinity;
+    for (const p of G.nodes) {
+      const d = Math.hypot(p.x - x, p.y - y) - rad(p);
+      if (d < 7 / G.k && d < bd) { best = p; bd = d; }
+    }
+    return { x, y, node: best, sx: ev.clientX - r.left, sy: ev.clientY - r.top };
+  }
+  function zoom(f, cx, cy) {
+    const cv = $("cv");
+    cx ??= cv.clientWidth / 2; cy ??= cv.clientHeight / 2;
+    const k = Math.max(0.15, Math.min(6, G.k * f));
+    G.x = cx - ((cx - G.x) / G.k) * k; G.y = cy - ((cy - G.y) / G.k) * k; G.k = k; G.touched = true; draw();
+  }
+  function wireCanvas(cv, tip) {
+    const pts = new Map();
+    let pinch = 0;
+    cv.addEventListener("pointerdown", (ev) => {
+      cv.setPointerCapture(ev.pointerId);
+      pts.set(ev.pointerId, ev);
+      const hit = at(ev);
+      G.drag = { node: hit.node, sx: ev.clientX, sy: ev.clientY, ox: G.x, oy: G.y, moved: false };
+      if (pts.size === 2) { const [a, b] = [...pts.values()]; pinch = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY); }
+      cv.style.cursor = "grabbing";
+    });
+    cv.addEventListener("pointermove", (ev) => {
+      if (pts.has(ev.pointerId)) pts.set(ev.pointerId, ev);
+      if (pts.size === 2 && pinch) {
+        const [a, b] = [...pts.values()];
+        const d = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+        const r = cv.getBoundingClientRect();
+        zoom(d / pinch, (a.clientX + b.clientX) / 2 - r.left, (a.clientY + b.clientY) / 2 - r.top);
+        pinch = d;
+        return;
+      }
+      const hit = at(ev), d = G.drag;
+      if (d) {
+        if (Math.hypot(ev.clientX - d.sx, ev.clientY - d.sy) > 4) d.moved = true;
+        if (d.node) { d.node.x = hit.x; d.node.y = hit.y; if (G.alpha < 0.2) { G.alpha = 0.2; loop(); } }
+        else if (d.moved) { G.x = d.ox + ev.clientX - d.sx; G.y = d.oy + ev.clientY - d.sy; G.touched = true; }
+        draw();
+        return;
+      }
+      if (hit.node !== G.hover) { G.hover = hit.node; draw(); }
+      cv.style.cursor = hit.node ? "pointer" : "grab";
+      tip.hidden = !hit.node;
+      if (hit.node) {
+        const n = hit.node.n;
+        tip.replaceChildren(el("i", { text: label(n.type) + " · " + n.degree + " links" }), el("b", { text: n.title }), n.summary ? n.summary.replace(/`/g, "").slice(0, 140) : "");
+        const left = Math.min(hit.sx + 14, cv.clientWidth - tip.offsetWidth - 8);
+        tip.style.left = Math.max(8, left) + "px";
+        tip.style.top = Math.max(8, Math.min(hit.sy + 14, cv.clientHeight - tip.offsetHeight - 8)) + "px";
+      }
+    });
+    const up = (ev) => {
+      pts.delete(ev.pointerId);
+      pinch = 0;
+      const d = G.drag;
+      G.drag = null;
+      cv.style.cursor = "grab";
+      if (d && d.node && !d.moved && ev.type === "pointerup") location.hash = hashOf(d.node.n.id);
+    };
+    cv.addEventListener("pointerup", up);
+    cv.addEventListener("pointercancel", up);
+    cv.addEventListener("pointerleave", () => { if (!G.drag) { G.hover = null; tip.hidden = true; draw(); } });
+    cv.addEventListener("wheel", (ev) => {
+      if (!(ev.ctrlKey || ev.metaKey)) return;   // plain scrolling still scrolls the page
+      ev.preventDefault();
+      const r = cv.getBoundingClientRect();
+      zoom(Math.exp(-ev.deltaY * 0.01), ev.clientX - r.left, ev.clientY - r.top);
+    }, { passive: false });
+  }
+  function renderGraph(list) {
+    let note = null;
+    if (S.focus && byId.has(S.focus)) {
+      const f = byId.get(S.focus);
+      list = neighbourhood(S.focus, S.hops);
+      note = el("div", { class: "focus-note" }, el("span", {}, "Neighbourhood of ", el("a", { href: hashOf(f.id), text: f.title })),
+        el("span", { class: "seg", role: "group", "aria-label": "Distance" }, [1, 2].map((h) =>
+          el("button", { type: "button", "aria-pressed": String(S.hops === h), onclick: () => { S.hops = h; render(); }, text: h === 1 ? "1 hop" : "2 hops" }))),
+        el("button", { type: "button", class: "linkish", onclick: () => { S.focus = null; render(); }, text: "Show the whole graph" }));
+    }
+    const capped = buildGraph(list);
+    const extra = capped ? el("span", { text: `Drawing the ${CFG.graph_node_cap} most linked. Narrow the filters to see the rest.` }) : null;
+    const tip = el("div", { class: "tip", hidden: true });
+    const cv = el("canvas", { id: "cv", role: "img", "aria-label": `Graph of ${G.nodes.length} nodes and ${G.edges.length} links. The Cards view lists the same nodes as text.` });
+    const legendTypes = [...new Set(G.nodes.map((p) => p.n.type))].sort((a, b) => TYPE_ORDER.indexOf(a) - TYPE_ORDER.indexOf(b));
+    const wrap = el("div", { class: "graph-wrap" }, cv, tip,
+      el("div", { class: "graph-tools" },
+        el("button", { type: "button", "aria-label": "Zoom in", onclick: () => zoom(1.3), text: "+" }),
+        el("button", { type: "button", "aria-label": "Zoom out", onclick: () => zoom(1 / 1.3), text: "−" }),
+        el("button", { type: "button", "aria-label": "Fit to view", onclick: () => { G.touched = false; G.fit = true; draw(); G.fit = false; }, text: "⤢" })),
+      el("div", { class: "legend" },
+        legendTypes.map((t) => el("span", { "data-t": t }, glyph(t), label(t))), el("span", { class: "sep" }),
+        PROVS.filter((p) => S.prov.has(p)).map((p) => el("span", {}, el("i", { class: "stroke", "data-p": p }), p)),
+        el("span", { text: "Drag to pan · pinch or ⌘/Ctrl-scroll to zoom · click a node to open it" })));
+    $("results").replaceChildren(...[note, statusLine(list.length, extra),
+      G.nodes.length ? wrap : el("div", { class: "empty", text: "No node matches these filters." })].filter(Boolean));
+    if (G.nodes.length) { wireCanvas(cv, tip); G.touched = false; G.fit = true; G.alpha = Math.max(G.alpha, 0.05); loop(); }
+  }
+
+  // ---- node page -----------------------------------------------------------
+  const fmt = (v) => (Array.isArray(v) ? v.join(", ") : v && typeof v === "object" ? Object.entries(v).map(([k, x]) => `${k}: ${x}`).join(", ") : String(v));
+  function relSection(title, groups, pick, limit) {
+    if (!groups.size) return null;
+    const order = [...groups].sort((a, b) => edgeRank(a[0]) - edgeRank(b[0]) || a[0].localeCompare(b[0]));
+    return el("section", {}, el("h2", { text: title }), order.map(([type, edges]) => {
+      edges.sort((a, b) => (b.weight || 1) - (a.weight || 1));
+      const list = el("ul", { class: "rel-list" });
+      const fill = (n) => list.replaceChildren(...edges.slice(0, n).map((e) => {
+        const t = byId.get(pick(e));
+        return el("li", {}, glyph(t.type), el("div", {}, el("a", { href: hashOf(t.id), text: t.title }), el("span", { class: "prov", "data-p": e.provenance, text: e.provenance })),
+          e.why ? el("div", { class: "why", text: e.why }) : null);
+      }), edges.length > n ? el("li", {}, el("span"), el("button", { type: "button", class: "linkish", onclick: () => fill(edges.length), text: `Show all ${edges.length}` })) : "");
+      fill(limit);
+      return el("div", { class: "rel-group" }, el("h3", {}, type, el("span", { text: String(edges.length) })), list);
+    }));
+  }
+  function group(edges) {
+    const m = new Map();
+    for (const e of edges) if (S.prov.has(e.provenance)) (m.get(e.type) || m.set(e.type, []).get(e.type)).push(e);
+    return m;
+  }
+  function renderNode(n) {
+    document.title = `${n.title} · ${CFG.title}`;
+    const props = Object.entries(n.props || {}).filter(([, v]) => v !== null && v !== "" && !(Array.isArray(v) && !v.length) && !(typeof v === "object" && !Array.isArray(v) && !Object.keys(v).length));
+    const prose = el("article", { class: "prose", html: n.html || "" });
+    for (const t of prose.querySelectorAll("table")) { const w = el("div", { class: "table-scroll" }); t.replaceWith(w); w.append(t); }
+    $("node").replaceChildren(el("div", { class: "page" },
+      el("header", { class: "page-head" },
+        el("div", { class: "crumbs" },
+          el("a", { href: "#", text: "← All nodes" }),
+          el("button", { type: "button", class: "linkish", onclick: () => { S.focus = n.id; S.view = "graph"; location.hash = ""; route(); }, text: "Show neighbourhood in graph" })),
+        el("div", { class: "kind", "data-t": n.type }, glyph(n.type), label(n.type), el("span", { class: "pill", "data-s": n.status || "draft", text: n.status || "draft" })),
+        el("h1", { text: n.title }),
+        el("div", { class: "mono", style: "color:var(--ink-3)", text: n.id }),
+        n.summary ? el("p", { class: "lede" }, inline(n.summary)) : null,
+        (n.tags || []).length ? el("div", { class: "page-tags" }, n.tags.map((t) =>
+          el("button", { type: "button", class: "tag", onclick: () => { clearAll(true); S.tags.add(t); S.view = "cards"; location.hash = ""; route(); }, text: t }))) : null),
+      prose,
+      el("aside", { class: "aside" },
+        relSection("Relations", group(n.out), (e) => e.target, 8),
+        relSection("Referenced by", group(n.inn), (e) => e.source, 8),
+        n.dangling.length ? el("section", {}, el("h2", { text: "Links to nodes not in this site" }), el("ul", { class: "rel-list" }, n.dangling.map((e) =>
+          el("li", {}, el("span"), el("div", {}, el("span", { class: "mono", text: `${e.type} → ${e.target}` }), el("span", { class: "prov", "data-p": e.provenance, text: e.provenance })),
+            e.why ? el("div", { class: "why", text: e.why }) : null)))) : null,
+        props.length ? el("section", {}, el("h2", { text: "Properties" }), el("dl", { class: "props" }, props.flatMap(([k, v]) => [el("dt", { text: k.replace(/_/g, " ") }), el("dd", { text: fmt(v) })]))) : null)));
+    window.scrollTo(0, 0);
+  }
+
+  // ---- shell ---------------------------------------------------------------
+  function clearAll(silent) {
+    S.types.clear(); S.tags.clear(); S.status.clear(); S.prov = new Set(PROVS); S.q = ""; S.tagq = ""; S.focus = null; S.shown = CFG.page_size;
+    $("q").value = ""; $("tagq").value = "";
+    if (silent !== true) render();
+  }
+  function render() {
+    $("v-cards").setAttribute("aria-pressed", String(S.view === "cards"));
+    $("v-graph").setAttribute("aria-pressed", String(S.view === "graph"));
+    renderRail();
+    const list = NODES.filter((n) => matches(n));
+    if (S.view === "graph") renderGraph(list); else { cancelAnimationFrame(G.raf); renderCards(list); }
+  }
+  function route() {
+    const id = idOf(location.hash);
+    const n = byId.get(id);
+    $("browse").hidden = !!n;
+    $("detail").hidden = !n;
+    if (n) { cancelAnimationFrame(G.raf); renderNode(n); }
+    else { document.title = CFG.title; render(); }
+  }
+
+  $("q").addEventListener("input", (e) => { S.q = e.target.value.trim(); S.shown = CFG.page_size; if (location.hash.length > 1) location.hash = ""; else render(); });
+  $("tagq").addEventListener("input", (e) => { S.tagq = e.target.value.trim(); renderRail(); });
+  $("tags-more").addEventListener("click", () => { S.allTags = !S.allTags; renderRail(); });
+  $("clear").addEventListener("click", () => clearAll());
+  $("v-cards").addEventListener("click", () => { S.view = "cards"; S.focus = null; if (location.hash.length > 1) location.hash = ""; else render(); });
+  $("v-graph").addEventListener("click", () => { S.view = "graph"; if (location.hash.length > 1) location.hash = ""; else render(); });
+  $("rail-toggle").addEventListener("click", () => {
+    const open = $("rail").dataset.open !== "1";
+    $("rail").dataset.open = open ? "1" : "0";
+    $("rail-toggle").setAttribute("aria-expanded", String(open));
+  });
+  addEventListener("hashchange", route);
+  addEventListener("resize", () => { if ($("cv")) draw(); });
+  const retheme = () => { G.css = null; if ($("cv")) draw(); };
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", retheme);
+  new MutationObserver(retheme).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+  route();
+})();
+</script>
